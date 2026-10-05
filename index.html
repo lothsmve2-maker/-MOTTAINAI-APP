@@ -1,1 +1,903 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#111827"><title>MOTTAINAI</title><style>*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;background:#f5f7fb;color:#111827}.wrap{max-width:720px;margin:auto;padding:20px 16px 40px}.head{display:flex;justify-content:space-between;align-items:center}h1{margin:0;font-size:30px}.sub{color:#6b7280;font-size:13px}.card{background:#fff;border-radius:20px;padding:18px;margin:12px 0;box-shadow:0 4px 18px #0000000b}.hero{background:#111827;color:white}.muted{color:#cbd5e1}.loss{font-size:30px;font-weight:800}button{border:0;border-radius:14px;padding:13px 16px;font-size:15px;font-weight:700}.primary{background:#2563eb;color:white}.ghost{background:#eef2ff;color:#1d4ed8}.danger{background:#fee2e2;color:#b91c1c}input,select{width:100%;padding:13px;border:1px solid #d1d5db;border-radius:12px;font-size:16px;margin-top:6px}label{display:block;font-size:13px;color:#4b5563;margin:12px 0}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.item{display:flex;justify-content:space-between;gap:12px;align-items:center}.item h3{margin:0 0 5px}.item p{margin:3px 0;color:#6b7280;font-size:13px}.date{font-weight:800}.expired{color:#dc2626!important}.soon{color:#d97706!important}.ok{color:#059669!important}.hidden{display:none}.empty{text-align:center;color:#6b7280;padding:20px}.small{font-size:12px;color:#6b7280;line-height:1.5;margin-top:10px}</style></head><body><div class="wrap"><div class="head"><div><h1>♻️ MOTTAINAI</h1><div class="sub">期限切れ・使い忘れを減らそう</div></div><button class="ghost" onclick="document.getElementById('photo').click()">＋ 追加</button></div><div class="card hero"><div class="muted">今月失う可能性</div><div class="loss" id="loss">¥0</div><div class="muted">登録した期限付きアイテムの合計</div></div><div id="form" class="card hidden"><h2>期限を登録</h2><label>タイトル<input id="title" placeholder="例：楽天ポイント / 映画チケット"></label><div class="row"><label>種類<select id="type"><option>ポイント</option><option>クーポン</option><option>チケット</option><option>予約</option><option>商品</option><option>その他</option></select></label><label>金額<input id="amount" type="number" min="0" placeholder="0"></label></div><label>期限<input id="date" type="date"></label><label>やること<input id="action" placeholder="例：コンビニで使う"></label><div class="row"><button class="primary" onclick="saveItem()">保存する</button><button class="danger" onclick="cancelForm()">キャンセル</button></div><div class="small">この試作版では画像の内容をAIが自動判定する機能はまだ入っていません。入力した情報はこのiPhoneのブラウザ内に保存されます。</div></div><input id="photo" type="file" accept="image/*" class="hidden" onchange="startItem(this)"><div id="list"></div></div><script>const K='mottainai_items_v1';let items=JSON.parse(localStorage.getItem(K)||'[]');const $=id=>document.getElementById(id);function startItem(e){if(e.files[0])$('form').classList.remove('hidden')}function saveItem(){if(!$('date').value){alert('期限を入力してね');return}items.push({id:Date.now(),title:$('title').value.trim()||'未登録',type:$('type').value,amount:Number($('amount').value||0),date:$('date').value,action:$('action').value.trim()});localStorage.setItem(K,JSON.stringify(items));cancelForm();render()}function cancelForm(){$('form').classList.add('hidden');$('photo').value=''}function del(id){items=items.filter(x=>x.id!==id);localStorage.setItem(K,JSON.stringify(items));render()}function esc(s){return String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]))}function render(){items.sort((a,b)=>a.date.localeCompare(b.date));let now=new Date(),mo=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');$('loss').textContent='¥'+items.filter(x=>x.date.startsWith(mo)).reduce((s,x)=>s+x.amount,0).toLocaleString();$('list').innerHTML=items.length?items.map(x=>{let d=Math.ceil((new Date(x.date+'T23:59:59')-new Date())/86400000),c=d<0?'expired':d<=7?'soon':'ok',lab=d<0?'期限切れ':d===0?'今日':d===1?'明日':'あと'+d+'日';return '<div class="card item"><div><h3>'+esc(x.title)+'</h3><p>'+esc(x.type)+(x.amount?'・¥'+x.amount.toLocaleString():'')+'</p><p class="date '+c+'">'+x.date+'　'+lab+'</p>'+(x.action?'<p>→ '+esc(x.action)+'</p>':'')+'</div><button class="danger" onclick="del('+x.id+')">削除</button></div>'}).join(''):'<div class="card empty">まだ登録されていません。<br>右上の「＋追加」から登録してみよう。</div>'}render();</script></body></html>
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#111827">
+<title>MOTTAINAI</title>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans",
+  "Yu Gothic",sans-serif;
+  background:#f5f7fb;
+  color:#111827
+}
+.wrap{
+  max-width:720px;
+  margin:auto;
+  padding:20px 16px 50px
+}
+.head{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px
+}
+h1{margin:0;font-size:30px}
+.sub{color:#6b7280;font-size:13px}
+
+.card{
+  background:white;
+  border-radius:20px;
+  padding:18px;
+  margin:12px 0;
+  box-shadow:0 4px 18px #0000000b
+}
+
+.hero{
+  background:#111827;
+  color:white
+}
+.muted{color:#cbd5e1}
+.loss{
+  font-size:30px;
+  font-weight:800
+}
+
+button{
+  border:0;
+  border-radius:14px;
+  padding:13px 16px;
+  font-size:15px;
+  font-weight:700;
+  cursor:pointer
+}
+.primary{background:#2563eb;color:white}
+.ghost{background:#eef2ff;color:#1d4ed8}
+.danger{background:#fee2e2;color:#b91c1c}
+.gray{background:#e5e7eb;color:#374151}
+
+input,select{
+  width:100%;
+  padding:13px;
+  border:1px solid #d1d5db;
+  border-radius:12px;
+  font-size:16px;
+  margin-top:6px;
+  background:white
+}
+
+label{
+  display:block;
+  font-size:13px;
+  color:#4b5563;
+  margin:12px 0
+}
+
+.row{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px
+}
+
+.search{
+  margin-top:15px
+}
+
+.item{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  align-items:center
+}
+
+.item h3{
+  margin:0 0 5px;
+  font-size:18px
+}
+
+.item p{
+  margin:3px 0;
+  color:#6b7280;
+  font-size:13px
+}
+
+.date{
+  font-weight:800
+}
+
+.expired{color:#dc2626!important}
+.soon{color:#d97706!important}
+.ok{color:#059669!important}
+
+.hidden{display:none}
+
+.empty{
+  text-align:center;
+  color:#6b7280;
+  padding:25px
+}
+
+.small{
+  font-size:12px;
+  color:#6b7280;
+  line-height:1.5;
+  margin-top:10px
+}
+
+.progress{
+  height:10px;
+  background:#e5e7eb;
+  border-radius:99px;
+  overflow:hidden;
+  margin:12px 0
+}
+
+.progressbar{
+  height:100%;
+  width:0%;
+  background:#2563eb;
+  transition:.2s
+}
+
+.preview{
+  width:100%;
+  max-height:250px;
+  object-fit:contain;
+  border-radius:14px;
+  margin-top:10px;
+  background:#f3f4f6
+}
+
+.modal{
+  position:fixed;
+  inset:0;
+  background:#0008;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  z-index:10
+}
+
+.modalbox{
+  width:100%;
+  max-width:720px;
+  max-height:92vh;
+  overflow:auto;
+  background:white;
+  border-radius:24px 24px 0 0;
+  padding:20px
+}
+
+.modal h2{
+  margin-top:0
+}
+
+.top-actions{
+  display:flex;
+  gap:8px;
+  margin-top:12px
+}
+
+.top-actions button{
+  flex:1
+}
+
+.status{
+  padding:10px 12px;
+  border-radius:12px;
+  background:#f3f4f6;
+  font-size:13px;
+  margin-top:10px
+}
+
+.sort{
+  display:flex;
+  gap:8px;
+  margin-top:10px
+}
+
+.sort button{
+  flex:1;
+  padding:10px
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrap">
+
+  <div class="head">
+    <div>
+      <h1>♻️ MOTTAINAI</h1>
+      <div class="sub">期限切れ・使い忘れを減らそう</div>
+    </div>
+
+    <button class="ghost" onclick="choosePhoto()">＋ 追加</button>
+  </div>
+
+  <div class="card hero">
+    <div class="muted">今月失う可能性</div>
+    <div class="loss" id="loss">¥0</div>
+    <div class="muted">登録した期限付きアイテムの合計</div>
+  </div>
+
+  <div class="card">
+    <input
+      id="search"
+      class="search"
+      placeholder="🔎 キーワードで検索"
+      oninput="render()"
+    >
+
+    <div class="sort">
+      <button class="gray" onclick="sortMode='date';render()">期限順</button>
+      <button class="gray" onclick="sortMode='amount';render()">金額順</button>
+    </div>
+  </div>
+
+  <div id="list"></div>
+
+</div>
+
+<input
+  id="photo"
+  type="file"
+  accept="image/*"
+  class="hidden"
+  onchange="readImage(this)"
+>
+
+<div id="modal" class="modal hidden">
+  <div class="modalbox">
+
+    <h2>📋 内容を確認</h2>
+
+    <div id="ocrStatus" class="status">
+      画像を読み取っています…
+    </div>
+
+    <div class="progress">
+      <div id="progressBar" class="progressbar"></div>
+    </div>
+
+    <img id="preview" class="preview hidden">
+
+    <label>
+      タイトル
+      <input id="title" placeholder="例：楽天ポイント">
+    </label>
+
+    <div class="row">
+
+      <label>
+        種類
+        <select id="type">
+          <option>ポイント</option>
+          <option>クーポン</option>
+          <option>チケット</option>
+          <option>予約</option>
+          <option>商品</option>
+          <option>その他</option>
+        </select>
+      </label>
+
+      <label>
+        金額
+        <input id="amount" type="number" min="0" placeholder="0">
+      </label>
+
+    </div>
+
+    <label>
+      期限
+      <input id="date" type="date">
+    </label>
+
+    <label>
+      やること
+      <input id="action" placeholder="例：コンビニで使う">
+    </label>
+
+    <div class="top-actions">
+      <button class="primary" onclick="saveItem()">保存する</button>
+      <button class="danger" onclick="closeModal()">キャンセル</button>
+    </div>
+
+    <div class="small">
+      読み取った内容は自動入力されています。
+      間違っている場合は保存前に修正できます。
+    </div>
+
+  </div>
+</div>
+
+<script>
+
+const KEY = "mottainai_items_v3";
+
+let items = JSON.parse(localStorage.getItem(KEY) || "[]");
+
+let sortMode = "date";
+
+const $ = id => document.getElementById(id);
+
+
+/* -------------------------
+   画像選択
+------------------------- */
+
+function choosePhoto(){
+  $("photo").click();
+}
+
+
+/* -------------------------
+   画像読み取り
+------------------------- */
+
+async function readImage(input){
+
+  if(!input.files || !input.files[0]) return;
+
+  const file = input.files[0];
+
+  $("modal").classList.remove("hidden");
+
+  $("ocrStatus").textContent =
+    "画像を読み取っています…";
+
+  $("progressBar").style.width = "5%";
+
+  const preview = $("preview");
+
+  preview.src = URL.createObjectURL(file);
+
+  preview.classList.remove("hidden");
+
+  try{
+
+    const result = await Tesseract.recognize(
+      file,
+      "jpn+eng",
+      {
+        logger: message => {
+
+          if(message.status === "recognizing text"){
+
+            const p =
+              Math.round((message.progress || 0) * 100);
+
+            $("progressBar").style.width = p + "%";
+
+            $("ocrStatus").textContent =
+              "文字を読み取り中… " + p + "%";
+          }
+
+        }
+      }
+    );
+
+    const text = result.data.text || "";
+
+    $("progressBar").style.width = "100%";
+
+    $("ocrStatus").textContent =
+      "読み取り完了。内容を確認してね。";
+
+    parseText(text);
+
+  }catch(error){
+
+    console.error(error);
+
+    $("ocrStatus").textContent =
+      "読み取りに失敗しました。手入力してください。";
+
+    $("progressBar").style.width = "0%";
+
+    parseText("");
+
+  }
+
+}
+
+
+/* -------------------------
+   OCR結果から自動判定
+------------------------- */
+
+function parseText(text){
+
+  const clean = text
+    .replace(/\r/g,"\n")
+    .replace(/[　]/g," ")
+    .trim();
+
+  console.log("OCR:",clean);
+
+  let date = findDate(clean);
+  let amount = findAmount(clean);
+  let type = guessType(clean);
+  let title = guessTitle(clean,date,amount);
+  let action = guessAction(type,title);
+
+  $("title").value = title || "未登録";
+  $("amount").value = amount || "";
+  $("date").value = date || "";
+  $("type").value = type;
+  $("action").value = action;
+
+}
+
+
+/* -------------------------
+   日付判定
+------------------------- */
+
+function findDate(text){
+
+  let m;
+
+  m = text.match(
+    /(20\d{2})[\/\-.年](\d{1,2})[\/\-.月](\d{1,2})日?/
+  );
+
+  if(m){
+    return m[1] + "-" +
+      String(m[2]).padStart(2,"0") + "-" +
+      String(m[3]).padStart(2,"0");
+  }
+
+  m = text.match(
+    /(\d{1,2})[\/\-.月](\d{1,2})日?/
+  );
+
+  if(m){
+
+    const now = new Date();
+
+    let year = now.getFullYear();
+
+    let month = Number(m[1]);
+    let day = Number(m[2]);
+
+    if(month < 1 || month > 12) return "";
+
+    return year + "-" +
+      String(month).padStart(2,"0") + "-" +
+      String(day).padStart(2,"0");
+  }
+
+  return "";
+}
+
+
+/* -------------------------
+   金額判定
+------------------------- */
+
+function findAmount(text){
+
+  let m = text.match(
+    /[¥￥]\s*([0-9０-９,，]+)/
+  );
+
+  if(!m){
+
+    m = text.match(
+      /([0-9０-９,，]+)\s*(?:円|ポイント|pt)/
+    );
+
+  }
+
+  if(!m) return 0;
+
+  let value = m[1]
+    .replace(/[０-９]/g,c =>
+      String.fromCharCode(c.charCodeAt(0)-65248)
+    )
+    .replace(/[,，]/g,"");
+
+  return Number(value) || 0;
+}
+
+
+/* -------------------------
+   種類判定
+------------------------- */
+
+function guessType(text){
+
+  if(/ポイント|point|pt/i.test(text))
+    return "ポイント";
+
+  if(/クーポン|coupon|割引|OFF/i.test(text))
+    return "クーポン";
+
+  if(/チケット|ticket|入場券|乗車券/i.test(text))
+    return "チケット";
+
+  if(/予約|reservation|booking/i.test(text))
+    return "予約";
+
+  if(/商品|購入|注文/i.test(text))
+    return "商品";
+
+  return "その他";
+}
+
+
+/* -------------------------
+   タイトル候補
+------------------------- */
+
+function guessTitle(text,date,amount){
+
+  const lines = text
+    .split("\n")
+    .map(x=>x.trim())
+    .filter(Boolean);
+
+  const bad = [
+    /期限/,
+    /有効/,
+    /まで/,
+    /円/,
+    /ポイント/,
+    /クーポン/,
+    /チケット/,
+    /予約/,
+    /^\d+$/,
+    /^¥/,
+    /^￥/
+  ];
+
+  for(const line of lines){
+
+    if(line.length < 2) continue;
+
+    if(bad.some(r=>r.test(line))) continue;
+
+    return line.substring(0,40);
+  }
+
+  return "";
+}
+
+
+/* -------------------------
+   やること自動提案
+------------------------- */
+
+function guessAction(type,title){
+
+  if(type === "ポイント")
+    return "期限までにポイントを使う";
+
+  if(type === "クーポン")
+    return "期限までにクーポンを使う";
+
+  if(type === "チケット")
+    return "期限までに利用する";
+
+  if(type === "予約")
+    return "予約日を確認する";
+
+  if(type === "商品")
+    return "期限までに利用する";
+
+  return "期限までに確認する";
+}
+
+
+/* -------------------------
+   保存
+------------------------- */
+
+function saveItem(){
+
+  const title =
+    $("title").value.trim() || "未登録";
+
+  const date =
+    $("date").value;
+
+  if(!date){
+
+    alert("期限を入力してね");
+
+    return;
+  }
+
+  const item = {
+
+    id:Date.now(),
+
+    title:title,
+
+    type:$("type").value,
+
+    amount:Number($("amount").value || 0),
+
+    date:date,
+
+    action:$("action").value.trim(),
+
+    createdAt:new Date().toISOString()
+
+  };
+
+  items.push(item);
+
+  localStorage.setItem(
+    KEY,
+    JSON.stringify(items)
+  );
+
+  closeModal();
+
+  render();
+}
+
+
+/* -------------------------
+   モーダル閉じる
+------------------------- */
+
+function closeModal(){
+
+  $("modal").classList.add("hidden");
+
+  $("photo").value="";
+
+  $("preview").classList.add("hidden");
+
+  $("progressBar").style.width="0%";
+
+}
+
+
+/* -------------------------
+   削除
+------------------------- */
+
+function del(id){
+
+  if(!confirm("この登録を削除する？"))
+    return;
+
+  items =
+    items.filter(x=>x.id!==id);
+
+  localStorage.setItem(
+    KEY,
+    JSON.stringify(items)
+  );
+
+  render();
+}
+
+
+/* -------------------------
+   編集
+------------------------- */
+
+function editItem(id){
+
+  const x =
+    items.find(item=>item.id===id);
+
+  if(!x) return;
+
+  $("modal").classList.remove("hidden");
+
+  $("ocrStatus").textContent =
+    "登録内容を編集できます。";
+
+  $("progressBar").style.width="100%";
+
+  $("preview").classList.add("hidden");
+
+  $("title").value=x.title;
+
+  $("type").value=x.type;
+
+  $("amount").value=x.amount;
+
+  $("date").value=x.date;
+
+  $("action").value=x.action;
+
+  $("saveEditMode").value=id;
+
+}
+
+
+/* -------------------------
+   文字エスケープ
+------------------------- */
+
+function esc(s){
+
+  return String(s).replace(
+    /[&<>"]/g,
+    m => ({
+      "&":"&amp;",
+      "<":"&lt;",
+      ">":"&gt;",
+      '"':"&quot;"
+    }[m])
+  );
+
+}
+
+
+/* -------------------------
+   一覧表示
+------------------------- */
+
+function render(){
+
+  const search =
+    $("search").value
+      .trim()
+      .toLowerCase();
+
+  let arr =
+    items.filter(x=>{
+
+      if(!search) return true;
+
+      return (
+        x.title.toLowerCase().includes(search) ||
+        x.type.toLowerCase().includes(search) ||
+        x.action.toLowerCase().includes(search)
+      );
+
+    });
+
+  if(sortMode==="amount"){
+
+    arr.sort((a,b)=>b.amount-a.amount);
+
+  }else{
+
+    arr.sort((a,b)=>
+      a.date.localeCompare(b.date)
+    );
+
+  }
+
+
+  const now = new Date();
+
+  const mo =
+    now.getFullYear() +
+    "-" +
+    String(now.getMonth()+1).padStart(2,"0");
+
+
+  const loss =
+    items
+      .filter(x=>x.date.startsWith(mo))
+      .reduce((s,x)=>s+x.amount,0);
+
+
+  $("loss").textContent =
+    "¥" + loss.toLocaleString();
+
+
+  if(!arr.length){
+
+    $("list").innerHTML =
+      '<div class="card empty">' +
+      'まだ登録されていません。<br>' +
+      '右上の「＋追加」からスクショを選んでみよう。' +
+      '</div>';
+
+    return;
+  }
+
+
+  $("list").innerHTML =
+    arr.map(x=>{
+
+      const d =
+        Math.ceil(
+          (
+            new Date(x.date+"T23:59:59")
+            - new Date()
+          ) / 86400000
+        );
+
+      let c =
+        d < 0
+        ? "expired"
+        : d <= 7
+        ? "soon"
+        : "ok";
+
+      let lab =
+        d < 0
+        ? "期限切れ"
+        : d === 0
+        ? "今日"
+        : d === 1
+        ? "明日"
+        : "あと"+d+"日";
+
+
+      return `
+        <div class="card item">
+
+          <div>
+
+            <h3>${esc(x.title)}</h3>
+
+            <p>
+              ${esc(x.type)}
+              ${x.amount
+                ? "・¥"+x.amount.toLocaleString()
+                : ""}
+            </p>
+
+            <p class="date ${c}">
+              ${x.date}　${lab}
+            </p>
+
+            ${
+              x.action
+              ? "<p>→ "+esc(x.action)+"</p>"
+              : ""
+            }
+
+          </div>
+
+          <div>
+
+            <button
+              class="gray"
+              onclick="editItem(${x.id})"
+            >
+              編集
+            </button>
+
+            <br><br>
+
+            <button
+              class="danger"
+              onclick="del(${x.id})"
+            >
+              削除
+            </button>
+
+          </div>
+
+        </div>
+      `;
+
+    }).join("");
+
+}
+
+
+/* -------------------------
+   初期表示
+------------------------- */
+
+render();
+
+</script>
+
+<!-- 編集用ID -->
+<input id="saveEditMode" type="hidden">
+
+</body>
+</html>

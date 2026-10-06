@@ -6,9 +6,6 @@
 <meta name="theme-color" content="#111827">
 <title>MOTTAINAI</title>
 
-<!-- Tesseract.js v5 -->
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-
 <style>
 *{box-sizing:border-box}
 body{
@@ -143,24 +140,9 @@ label{
   margin-top:10px
 }
 
-.progress{
-  height:10px;
-  background:#e5e7eb;
-  border-radius:99px;
-  overflow:hidden;
-  margin:12px 0
-}
-
-.progressbar{
-  height:100%;
-  width:0%;
-  background:#2563eb;
-  transition:.2s
-}
-
 .preview{
   width:100%;
-  max-height:250px;
+  max-height:200px;
   object-fit:contain;
   border-radius:14px;
   margin-top:10px;
@@ -201,14 +183,6 @@ label{
   flex:1
 }
 
-.status{
-  padding:10px 12px;
-  border-radius:12px;
-  background:#f3f4f6;
-  font-size:13px;
-  margin-top:10px
-}
-
 .sort{
   display:flex;
   gap:8px;
@@ -232,7 +206,7 @@ label{
       <div class="sub">期限切れ・使い忘れを減らそう</div>
     </div>
 
-    <button class="ghost" onclick="choosePhoto()">＋ 追加</button>
+    <button class="ghost" onclick="openAddModal()">＋ 追加</button>
   </div>
 
   <div class="card hero">
@@ -264,7 +238,7 @@ label{
   type="file"
   accept="image/*"
   class="hidden"
-  onchange="readImage(this)"
+  onchange="handlePhotoSelect(this)"
 >
 
 <!-- 編集用ID -->
@@ -273,15 +247,7 @@ label{
 <div id="modal" class="modal hidden">
   <div class="modalbox">
 
-    <h2 id="modalTitle">📋 内容を確認</h2>
-
-    <div id="ocrStatus" class="status">
-      画像を読み取っています…
-    </div>
-
-    <div class="progress">
-      <div id="progressBar" class="progressbar"></div>
-    </div>
+    <h2 id="modalTitle">📋 アイテムの登録</h2>
 
     <img id="preview" class="preview hidden">
 
@@ -326,17 +292,12 @@ label{
       <button class="danger" onclick="closeModal()">キャンセル</button>
     </div>
 
-    <div class="small">
-      読み取った内容は自動入力されています。
-      間違っている場合は保存前に修正できます。
-    </div>
-
   </div>
 </div>
 
 <script>
 
-const KEY = "mottainai_items_v3";
+const KEY = "mottainai_items_v4";
 
 let items = [];
 try {
@@ -351,256 +312,31 @@ const $ = id => document.getElementById(id);
 
 
 /* -------------------------
-   画像選択
+   追加ボタン・画像選択
 ------------------------- */
 
-function choosePhoto(){
+function openAddModal(){
   closeModal();
+  $("saveEditMode").value = "";
+  $("modalTitle").textContent = "📋 アイテムの登録";
+  
+  // 今日の日付を初期セット
+  const today = new Date().toISOString().split('T')[0];
+  $("date").value = today;
+  
+  $("modal").classList.remove("hidden");
+  
+  // 画像選択ダイアログを開く
   $("photo").click();
 }
 
-
-/* -------------------------
-   画像読み取り (安全・安定化版)
-------------------------- */
-
-async function readImage(input){
-
-  if(!input.files || !input.files[0]) return;
-
-  const file = input.files[0];
-
-  $("modalTitle").textContent = "📋 内容を確認";
-  $("modal").classList.remove("hidden");
-
-  $("ocrStatus").textContent = "解析中…";
-  $("progressBar").style.width = "10%";
-
-  const preview = $("preview");
-  preview.src = URL.createObjectURL(file);
-  preview.classList.remove("hidden");
-
-  try {
-    // Tesseract.js が用意している安全な文字解析呼び出し
-    const result = await Tesseract.recognize(
-      file,
-      "jpn+eng",
-      {
-        langPath: "https://cdn.jsdelivr.net/npm/@tesseract.js-data/jpn/4.0.0_best_int",
-        logger: m => {
-          if (m.status === "recognizing text") {
-            const p = Math.round((m.progress || 0) * 100);
-            $("progressBar").style.width = p + "%";
-            $("ocrStatus").textContent = "文字を読み取り中… " + p + "%";
-          } else if (m.status) {
-            $("ocrStatus").textContent = "準備中 (" + m.status + ")…";
-          }
-        }
-      }
-    );
-
-    const text = (result && result.data && result.data.text) ? result.data.text : "";
-
-    $("progressBar").style.width = "100%";
-    $("ocrStatus").textContent = "読み取り完了。内容を確認してね。";
-
-    parseText(text);
-
-  } catch(error) {
-    console.error("OCR Error:", error);
-
-    $("ocrStatus").textContent = "読み取りに失敗しました。手入力してください。";
-    $("progressBar").style.width = "0%";
-
-    parseText("");
+function handlePhotoSelect(input){
+  if(input.files && input.files[0]){
+    const file = input.files[0];
+    const preview = $("preview");
+    preview.src = URL.createObjectURL(file);
+    preview.classList.remove("hidden");
   }
-
-}
-
-
-/* -------------------------
-   OCR結果から自動判定
-------------------------- */
-
-function parseText(text){
-
-  const clean = text
-    .replace(/\r/g,"\n")
-    .replace(/[　]/g," ")
-    .trim();
-
-  let date = findDate(clean);
-  let amount = findAmount(clean);
-  let type = guessType(clean);
-  let title = guessTitle(clean,date,amount);
-  let action = guessAction(type,title);
-
-  $("title").value = title || "未登録";
-  $("amount").value = amount || "";
-  $("date").value = date || "";
-  $("type").value = type;
-  $("action").value = action;
-
-}
-
-
-/* -------------------------
-   日付判定
-------------------------- */
-
-function findDate(text){
-
-  let m;
-
-  m = text.match(
-    /(20\d{2})[\/\-.年](\d{1,2})[\/\-.月](\d{1,2})日?/
-  );
-
-  if(m){
-    return m[1] + "-" +
-      String(m[2]).padStart(2,"0") + "-" +
-      String(m[3]).padStart(2,"0");
-  }
-
-  m = text.match(
-    /(\d{1,2})[\/\-.月](\d{1,2})日?/
-  );
-
-  if(m){
-
-    const now = new Date();
-
-    let year = now.getFullYear();
-
-    let month = Number(m[1]);
-    let day = Number(m[2]);
-
-    if(month < 1 || month > 12) return "";
-
-    return year + "-" +
-      String(month).padStart(2,"0") + "-" +
-      String(day).padStart(2,"0");
-  }
-
-  return "";
-}
-
-
-/* -------------------------
-   金額判定
-------------------------- */
-
-function findAmount(text){
-
-  let m = text.match(
-    /[¥￥]\s*([0-9０-９,，]+)/
-  );
-
-  if(!m){
-
-    m = text.match(
-      /([0-9０-９,，]+)\s*(?:円|ポイント|pt)/
-    );
-
-  }
-
-  if(!m) return 0;
-
-  let value = m[1]
-    .replace(/[０-９]/g,c =>
-      String.fromCharCode(c.charCodeAt(0)-65248)
-    )
-    .replace(/[,，]/g,"");
-
-  return Number(value) || 0;
-}
-
-
-/* -------------------------
-   種類判定
-------------------------- */
-
-function guessType(text){
-
-  if(/ポイント|point|pt/i.test(text))
-    return "ポイント";
-
-  if(/クーポン|coupon|割引|OFF/i.test(text))
-    return "クーポン";
-
-  if(/チケット|ticket|入場券|乗車券/i.test(text))
-    return "チケット";
-
-  if(/予約|reservation|booking/i.test(text))
-    return "予約";
-
-  if(/商品|購入|注文/i.test(text))
-    return "商品";
-
-  return "その他";
-}
-
-
-/* -------------------------
-   タイトル候補
-------------------------- */
-
-function guessTitle(text,date,amount){
-
-  const lines = text
-    .split("\n")
-    .map(x=>x.trim())
-    .filter(Boolean);
-
-  const bad = [
-    /期限/,
-    /有効/,
-    /まで/,
-    /円/,
-    /ポイント/,
-    /クーポン/,
-    /チケット/,
-    /予約/,
-    /^\d+$/,
-    /^¥/,
-    /^￥/
-  ];
-
-  for(const line of lines){
-
-    if(line.length < 2) continue;
-
-    if(bad.some(r=>r.test(line))) continue;
-
-    return line.substring(0,40);
-  }
-
-  return "";
-}
-
-
-/* -------------------------
-   やること自動提案
-------------------------- */
-
-function guessAction(type,title){
-
-  if(type === "ポイント")
-    return "期限までにポイントを使う";
-
-  if(type === "クーポン")
-    return "期限までにクーポンを使う";
-
-  if(type === "チケット")
-    return "期限までに利用する";
-
-  if(type === "予約")
-    return "予約日を確認する";
-
-  if(type === "商品")
-    return "期限までに利用する";
-
-  return "期限までに確認する";
 }
 
 
@@ -610,23 +346,17 @@ function guessAction(type,title){
 
 function saveItem(){
 
-  const title =
-    $("title").value.trim() || "未登録";
-
-  const date =
-    $("date").value;
+  const title = $("title").value.trim() || "未登録";
+  const date = $("date").value;
 
   if(!date){
-
-    alert("期限を入力してね");
-
+    alert("期限を入力してください");
     return;
   }
 
   const editId = Number($("saveEditMode").value);
 
   if(editId){
-
     items = items.map(item => {
       if(item.id === editId){
         return {
@@ -640,29 +370,17 @@ function saveItem(){
       }
       return item;
     });
-
-  }else{
-
+  } else {
     const item = {
-
       id: Date.now(),
-
       title: title,
-
       type: $("type").value,
-
       amount: Number($("amount").value || 0),
-
       date: date,
-
       action: $("action").value.trim(),
-
       createdAt: new Date().toISOString()
-
     };
-
     items.push(item);
-
   }
 
   try {
@@ -672,7 +390,6 @@ function saveItem(){
   }
 
   closeModal();
-
   render();
 }
 
@@ -682,23 +399,16 @@ function saveItem(){
 ------------------------- */
 
 function closeModal(){
-
   $("modal").classList.add("hidden");
-
-  $("photo").value="";
-
-  $("saveEditMode").value="";
-
+  $("photo").value = "";
+  $("saveEditMode").value = "";
   $("preview").classList.add("hidden");
-
-  $("progressBar").style.width="0%";
 
   $("title").value = "";
   $("amount").value = "";
   $("date").value = "";
   $("type").value = "ポイント";
   $("action").value = "";
-
 }
 
 
@@ -707,11 +417,9 @@ function closeModal(){
 ------------------------- */
 
 function del(id){
+  if(!confirm("この登録を削除しますか？")) return;
 
-  if(!confirm("この登録を削除する？"))
-    return;
-
-  items = items.filter(x=>x.id!==id);
+  items = items.filter(x => x.id !== id);
 
   try {
     localStorage.setItem(KEY, JSON.stringify(items));
@@ -728,33 +436,20 @@ function del(id){
 ------------------------- */
 
 function editItem(id){
-
-  const x = items.find(item=>item.id===id);
-
+  const x = items.find(item => item.id === id);
   if(!x) return;
 
   $("modalTitle").textContent = "✏️ 登録内容を編集";
-
   $("modal").classList.remove("hidden");
-
-  $("ocrStatus").textContent = "登録内容を編集できます。";
-
-  $("progressBar").style.width="100%";
-
   $("preview").classList.add("hidden");
 
-  $("title").value=x.title;
+  $("title").value = x.title;
+  $("type").value = x.type;
+  $("amount").value = x.amount;
+  $("date").value = x.date;
+  $("action").value = x.action;
 
-  $("type").value=x.type;
-
-  $("amount").value=x.amount;
-
-  $("date").value=x.date;
-
-  $("action").value=x.action;
-
-  $("saveEditMode").value=id;
-
+  $("saveEditMode").value = id;
 }
 
 
@@ -763,7 +458,6 @@ function editItem(id){
 ------------------------- */
 
 function esc(s){
-
   return String(s).replace(
     /[&<>"]/g,
     m => ({
@@ -773,7 +467,6 @@ function esc(s){
       '"':"&quot;"
     }[m])
   );
-
 }
 
 
@@ -783,145 +476,77 @@ function esc(s){
 
 function render(){
 
-  const search =
-    $("search").value
-      .trim()
-      .toLowerCase();
+  const search = $("search").value.trim().toLowerCase();
 
-  let arr =
-    items.filter(x=>{
-
-      if(!search) return true;
-
-      return (
-        x.title.toLowerCase().includes(search) ||
-        x.type.toLowerCase().includes(search) ||
-        x.action.toLowerCase().includes(search)
-      );
-
-    });
-
-  if(sortMode==="amount"){
-
-    arr.sort((a,b)=>b.amount-a.amount);
-
-  }else{
-
-    arr.sort((a,b)=>
-      a.date.localeCompare(b.date)
+  let arr = items.filter(x => {
+    if(!search) return true;
+    return (
+      x.title.toLowerCase().includes(search) ||
+      x.type.toLowerCase().includes(search) ||
+      x.action.toLowerCase().includes(search)
     );
+  });
 
+  if(sortMode === "amount"){
+    arr.sort((a,b) => b.amount - a.amount);
+  } else {
+    arr.sort((a,b) => a.date.localeCompare(b.date));
   }
 
-
   const now = new Date();
+  const mo = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2,"0");
 
-  const mo =
-    now.getFullYear() +
-    "-" +
-    String(now.getMonth()+1).padStart(2,"0");
+  const loss = items
+    .filter(x => x.date.startsWith(mo))
+    .reduce((s,x) => s + x.amount, 0);
 
-
-  const loss =
-    items
-      .filter(x=>x.date.startsWith(mo))
-      .reduce((s,x)=>s+x.amount,0);
-
-
-  $("loss").textContent =
-    "¥" + loss.toLocaleString();
-
+  $("loss").textContent = "¥" + loss.toLocaleString();
 
   if(!arr.length){
-
     $("list").innerHTML =
       '<div class="card empty">' +
       'まだ登録されていません。<br>' +
-      '右上の「＋追加」からスクショを選んでみよう。' +
+      '右上の「＋追加」ボタンから登録してみましょう。' +
       '</div>';
-
     return;
   }
-
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  $("list").innerHTML =
-    arr.map(x=>{
+  $("list").innerHTML = arr.map(x => {
 
-      const targetDate = new Date(x.date + "T00:00:00");
-      const diffTime = targetDate - today;
-      const d = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    const targetDate = new Date(x.date + "T00:00:00");
+    const diffTime = targetDate - today;
+    const d = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
-      let c =
-        d < 0
-        ? "expired"
-        : d <= 7
-        ? "soon"
-        : "ok";
+    let c = d < 0 ? "expired" : d <= 7 ? "soon" : "ok";
+    let lab = d < 0 ? "期限切れ" : d === 0 ? "今日" : d === 1 ? "明日" : "あと"+d+"日";
 
-      let lab =
-        d < 0
-        ? "期限切れ"
-        : d === 0
-        ? "今日"
-        : d === 1
-        ? "明日"
-        : "あと"+d+"日";
-
-
-      return `
-        <div class="card item">
-
-          <div>
-
-            <h3>${esc(x.title)}</h3>
-
-            <p>
-              ${esc(x.type)}
-              ${x.amount
-                ? "・¥"+x.amount.toLocaleString()
-                : ""}
-            </p>
-
-            <p class="date ${c}">
-              ${x.date}　${lab}
-            </p>
-
-            ${
-              x.action
-              ? "<p>→ "+esc(x.action)+"</p>"
-              : ""
-            }
-
-          </div>
-
-          <div class="item-actions">
-
-            <button
-              class="gray"
-              onclick="editItem(${x.id})"
-            >
-              編集
-            </button>
-
-            <button
-              class="danger"
-              onclick="del(${x.id})"
-            >
-              削除
-            </button>
-
-          </div>
-
+    return `
+      <div class="card item">
+        <div>
+          <h3>${esc(x.title)}</h3>
+          <p>
+            ${esc(x.type)}
+            ${x.amount ? "・¥"+x.amount.toLocaleString() : ""}
+          </p>
+          <p class="date ${c}">
+            ${x.date}　${lab}
+          </p>
+          ${x.action ? "<p>→ "+esc(x.action)+"</p>" : ""}
         </div>
-      `;
 
-    }).join("");
+        <div class="item-actions">
+          <button class="gray" onclick="editItem(${x.id})">編集</button>
+          <button class="danger" onclick="del(${x.id})">削除</button>
+        </div>
+      </div>
+    `;
+
+  }).join("");
 
 }
-
 
 /* -------------------------
    初期表示

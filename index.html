@@ -3,15 +3,13 @@
 <head>
 <meta charset="utf-8"> 
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#111827">
 <title>MOTTAINAI</title>
 
 <style>
 *{box-sizing:border-box}
 body{
   margin:0;
-  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans",
-  "Yu Gothic",sans-serif;
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;
   background:#f5f7fb;
   color:#111827
 }
@@ -26,7 +24,7 @@ body{
   align-items:center;
   gap:10px
 }
-h1{margin:0;font-size:30px}
+h1{margin:0;font-size:28px}
 .sub{color:#6b7280;font-size:13px}
 
 .card{
@@ -50,7 +48,7 @@ h1{margin:0;font-size:30px}
 button{
   border:0;
   border-radius:14px;
-  padding:13px 16px;
+  padding:12px 16px;
   font-size:15px;
   font-weight:700;
   cursor:pointer
@@ -62,7 +60,7 @@ button{
 
 input,select{
   width:100%;
-  padding:13px;
+  padding:12px;
   border:1px solid #d1d5db;
   border-radius:12px;
   font-size:16px;
@@ -81,10 +79,6 @@ label{
   display:grid;
   grid-template-columns:1fr 1fr;
   gap:10px
-}
-
-.search{
-  margin-top:15px
 }
 
 .item{
@@ -133,22 +127,6 @@ label{
   padding:25px
 }
 
-.small{
-  font-size:12px;
-  color:#6b7280;
-  line-height:1.5;
-  margin-top:10px
-}
-
-.preview{
-  width:100%;
-  max-height:200px;
-  object-fit:contain;
-  border-radius:14px;
-  margin-top:10px;
-  background:#f3f4f6
-}
-
 .modal{
   position:fixed;
   inset:0;
@@ -176,7 +154,7 @@ label{
 .top-actions{
   display:flex;
   gap:8px;
-  margin-top:12px
+  margin-top:16px
 }
 
 .top-actions button{
@@ -218,7 +196,6 @@ label{
   <div class="card">
     <input
       id="search"
-      class="search"
       placeholder="🔎 キーワードで検索"
       oninput="render()"
     >
@@ -233,14 +210,6 @@ label{
 
 </div>
 
-<input
-  id="photo"
-  type="file"
-  accept="image/*"
-  class="hidden"
-  onchange="handlePhotoSelect(this)"
->
-
 <!-- 編集用ID -->
 <input id="saveEditMode" type="hidden">
 
@@ -248,8 +217,6 @@ label{
   <div class="modalbox">
 
     <h2 id="modalTitle">📋 アイテムの登録</h2>
-
-    <img id="preview" class="preview hidden">
 
     <label>
       タイトル
@@ -297,7 +264,7 @@ label{
 
 <script>
 
-const KEY = "mottainai_items_v4";
+const KEY = "mottainai_items_v5";
 
 let items = [];
 try {
@@ -308,59 +275,39 @@ try {
 
 let sortMode = "date";
 
-const $ = id => document.getElementById(id);
+function $(id) {
+  return document.getElementById(id);
+}
 
-
-/* -------------------------
-   追加ボタン・画像選択
-------------------------- */
-
-function openAddModal(){
+/* モーダル表示 */
+function openAddModal() {
   closeModal();
   $("saveEditMode").value = "";
   $("modalTitle").textContent = "📋 アイテムの登録";
   
-  // 今日の日付を初期セット
   const today = new Date().toISOString().split('T')[0];
   $("date").value = today;
   
   $("modal").classList.remove("hidden");
-  
-  // 画像選択ダイアログを開く
-  $("photo").click();
 }
 
-function handlePhotoSelect(input){
-  if(input.files && input.files[0]){
-    const file = input.files[0];
-    const preview = $("preview");
-    preview.src = URL.createObjectURL(file);
-    preview.classList.remove("hidden");
-  }
-}
-
-
-/* -------------------------
-   保存
-------------------------- */
-
-function saveItem(){
-
+/* 保存 */
+function saveItem() {
   const title = $("title").value.trim() || "未登録";
   const date = $("date").value;
 
-  if(!date){
+  if(!date) {
     alert("期限を入力してください");
     return;
   }
 
   const editId = Number($("saveEditMode").value);
 
-  if(editId){
-    items = items.map(item => {
-      if(item.id === editId){
+  if(editId) {
+    items = items.map(function(item) {
+      if(item.id === editId) {
         return {
-          ...item,
+          id: item.id,
           title: title,
           type: $("type").value,
           amount: Number($("amount").value || 0),
@@ -371,39 +318,28 @@ function saveItem(){
       return item;
     });
   } else {
-    const item = {
+    items.push({
       id: Date.now(),
       title: title,
       type: $("type").value,
       amount: Number($("amount").value || 0),
       date: date,
-      action: $("action").value.trim(),
-      createdAt: new Date().toISOString()
-    };
-    items.push(item);
+      action: $("action").value.trim()
+    });
   }
 
   try {
     localStorage.setItem(KEY, JSON.stringify(items));
-  } catch(e) {
-    console.error("Storage Error:", e);
-  }
+  } catch(e) {}
 
   closeModal();
   render();
 }
 
-
-/* -------------------------
-   モーダル閉じる
-------------------------- */
-
-function closeModal(){
+/* 閉じる */
+function closeModal() {
   $("modal").classList.add("hidden");
-  $("photo").value = "";
   $("saveEditMode").value = "";
-  $("preview").classList.add("hidden");
-
   $("title").value = "";
   $("amount").value = "";
   $("date").value = "";
@@ -411,146 +347,100 @@ function closeModal(){
   $("action").value = "";
 }
 
-
-/* -------------------------
-   削除
-------------------------- */
-
-function del(id){
+/* 削除 */
+function del(id) {
   if(!confirm("この登録を削除しますか？")) return;
-
-  items = items.filter(x => x.id !== id);
-
+  items = items.filter(function(x) { return x.id !== id; });
   try {
     localStorage.setItem(KEY, JSON.stringify(items));
-  } catch(e) {
-    console.error("Storage Error:", e);
-  }
-
+  } catch(e) {}
   render();
 }
 
-
-/* -------------------------
-   編集
-------------------------- */
-
-function editItem(id){
-  const x = items.find(item => item.id === id);
+/* 編集 */
+function editItem(id) {
+  const x = items.find(function(item) { return item.id === id; });
   if(!x) return;
 
   $("modalTitle").textContent = "✏️ 登録内容を編集";
   $("modal").classList.remove("hidden");
-  $("preview").classList.add("hidden");
 
   $("title").value = x.title;
   $("type").value = x.type;
   $("amount").value = x.amount;
   $("date").value = x.date;
   $("action").value = x.action;
-
   $("saveEditMode").value = id;
 }
 
-
-/* -------------------------
-   文字エスケープ
-------------------------- */
-
-function esc(s){
-  return String(s).replace(
-    /[&<>"]/g,
-    m => ({
-      "&":"&amp;",
-      "<":"&lt;",
-      ">":"&gt;",
-      '"':"&quot;"
-    }[m])
-  );
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, function(m) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m];
+  });
 }
 
-
-/* -------------------------
-   一覧表示
-------------------------- */
-
-function render(){
-
+/* 描画 */
+function render() {
   const search = $("search").value.trim().toLowerCase();
 
-  let arr = items.filter(x => {
+  let arr = items.filter(function(x) {
     if(!search) return true;
     return (
-      x.title.toLowerCase().includes(search) ||
-      x.type.toLowerCase().includes(search) ||
-      x.action.toLowerCase().includes(search)
+      x.title.toLowerCase().indexOf(search) !== -1 ||
+      x.type.toLowerCase().indexOf(search) !== -1 ||
+      x.action.toLowerCase().indexOf(search) !== -1
     );
   });
 
-  if(sortMode === "amount"){
-    arr.sort((a,b) => b.amount - a.amount);
+  if(sortMode === "amount") {
+    arr.sort(function(a, b) { return b.amount - a.amount; });
   } else {
-    arr.sort((a,b) => a.date.localeCompare(b.date));
+    arr.sort(function(a, b) { return a.date.localeCompare(b.date); });
   }
 
   const now = new Date();
-  const mo = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2,"0");
+  const mo = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
 
   const loss = items
-    .filter(x => x.date.startsWith(mo))
-    .reduce((s,x) => s + x.amount, 0);
+    .filter(function(x) { return x.date.indexOf(mo) === 0; })
+    .reduce(function(s, x) { return s + x.amount; }, 0);
 
   $("loss").textContent = "¥" + loss.toLocaleString();
 
-  if(!arr.length){
-    $("list").innerHTML =
-      '<div class="card empty">' +
-      'まだ登録されていません。<br>' +
-      '右上の「＋追加」ボタンから登録してみましょう。' +
-      '</div>';
+  if(!arr.length) {
+    $("list").innerHTML = '<div class="card empty">まだ登録されていません。<br>右上の「＋追加」ボタンから登録してみましょう。</div>';
     return;
   }
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  $("list").innerHTML = arr.map(x => {
-
+  let html = "";
+  for(let i = 0; i < arr.length; i++) {
+    const x = arr[i];
     const targetDate = new Date(x.date + "T00:00:00");
     const diffTime = targetDate - today;
     const d = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
-    let c = d < 0 ? "expired" : d <= 7 ? "soon" : "ok";
-    let lab = d < 0 ? "期限切れ" : d === 0 ? "今日" : d === 1 ? "明日" : "あと"+d+"日";
+    let c = d < 0 ? "expired" : (d <= 7 ? "soon" : "ok");
+    let lab = d < 0 ? "期限切れ" : (d === 0 ? "今日" : (d === 1 ? "明日" : "あと" + d + "日"));
 
-    return `
-      <div class="card item">
-        <div>
-          <h3>${esc(x.title)}</h3>
-          <p>
-            ${esc(x.type)}
-            ${x.amount ? "・¥"+x.amount.toLocaleString() : ""}
-          </p>
-          <p class="date ${c}">
-            ${x.date}　${lab}
-          </p>
-          ${x.action ? "<p>→ "+esc(x.action)+"</p>" : ""}
-        </div>
+    html += '<div class="card item">' +
+      '<div>' +
+        '<h3>' + esc(x.title) + '</h3>' +
+        '<p>' + esc(x.type) + (x.amount ? ' ・¥' + x.amount.toLocaleString() : '') + '</p>' +
+        '<p class="date ' + c + '">' + x.date + '　' + lab + '</p>' +
+        (x.action ? '<p>→ ' + esc(x.action) + '</p>' : '') +
+      '</div>' +
+      '<div class="item-actions">' +
+        '<button class="gray" onclick="editItem(' + x.id + ')">編集</button>' +
+        '<button class="danger" onclick="del(' + x.id + ')">削除</button>' +
+      '</div>' +
+    '</div>';
+  }
 
-        <div class="item-actions">
-          <button class="gray" onclick="editItem(${x.id})">編集</button>
-          <button class="danger" onclick="del(${x.id})">削除</button>
-        </div>
-      </div>
-    `;
-
-  }).join("");
-
+  $("list").innerHTML = html;
 }
-
-/* -------------------------
-   初期表示
-------------------------- */
 
 render();
 

@@ -338,7 +338,12 @@ label{
 
 const KEY = "mottainai_items_v3";
 
-let items = JSON.parse(localStorage.getItem(KEY) || "[]");
+let items = [];
+try {
+  items = JSON.parse(localStorage.getItem(KEY) || "[]");
+} catch(e) {
+  items = [];
+}
 
 let sortMode = "date";
 
@@ -356,7 +361,7 @@ function choosePhoto(){
 
 
 /* -------------------------
-   画像読み取り (安定化版)
+   画像読み取り (安全・安定化版)
 ------------------------- */
 
 async function readImage(input){
@@ -368,35 +373,33 @@ async function readImage(input){
   $("modalTitle").textContent = "📋 内容を確認";
   $("modal").classList.remove("hidden");
 
-  $("ocrStatus").textContent = "解析ライブラリを準備中…";
+  $("ocrStatus").textContent = "解析中…";
   $("progressBar").style.width = "10%";
 
   const preview = $("preview");
   preview.src = URL.createObjectURL(file);
   preview.classList.remove("hidden");
 
-  // Tesseract Worker（Worker設定を追加して通信エラーを防止）
-  let worker = null;
-
   try {
-    // CDNのパス指定を明示
-    worker = await Tesseract.createWorker("jpn+eng", 1, {
-      workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
-      langPath: 'https://tessdata.projectnaptha.com/4.0.0',
-      corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js',
-      logger: message => {
-        if (message.status === "recognizing text") {
-          const p = Math.round((message.progress || 0) * 100);
-          $("progressBar").style.width = p + "%";
-          $("ocrStatus").textContent = "文字を読み取り中… " + p + "%";
-        } else if (message.status) {
-          $("ocrStatus").textContent = "準備中 (" + message.status + ")…";
+    // Tesseract.js が用意している安全な文字解析呼び出し
+    const result = await Tesseract.recognize(
+      file,
+      "jpn+eng",
+      {
+        langPath: "https://cdn.jsdelivr.net/npm/@tesseract.js-data/jpn/4.0.0_best_int",
+        logger: m => {
+          if (m.status === "recognizing text") {
+            const p = Math.round((m.progress || 0) * 100);
+            $("progressBar").style.width = p + "%";
+            $("ocrStatus").textContent = "文字を読み取り中… " + p + "%";
+          } else if (m.status) {
+            $("ocrStatus").textContent = "準備中 (" + m.status + ")…";
+          }
         }
       }
-    });
+    );
 
-    const result = await worker.recognize(file);
-    const text = result.data.text || "";
+    const text = (result && result.data && result.data.text) ? result.data.text : "";
 
     $("progressBar").style.width = "100%";
     $("ocrStatus").textContent = "読み取り完了。内容を確認してね。";
@@ -406,15 +409,10 @@ async function readImage(input){
   } catch(error) {
     console.error("OCR Error:", error);
 
-    $("ocrStatus").textContent = "読み取りに失敗しました。直接手入力してください。";
+    $("ocrStatus").textContent = "読み取りに失敗しました。手入力してください。";
     $("progressBar").style.width = "0%";
 
     parseText("");
-
-  } finally {
-    if (worker) {
-      await worker.terminate(); // リソース解放
-    }
   }
 
 }
@@ -430,8 +428,6 @@ function parseText(text){
     .replace(/\r/g,"\n")
     .replace(/[　]/g," ")
     .trim();
-
-  console.log("OCRResult:", clean);
 
   let date = findDate(clean);
   let amount = findAmount(clean);
@@ -669,10 +665,11 @@ function saveItem(){
 
   }
 
-  localStorage.setItem(
-    KEY,
-    JSON.stringify(items)
-  );
+  try {
+    localStorage.setItem(KEY, JSON.stringify(items));
+  } catch(e) {
+    console.error("Storage Error:", e);
+  }
 
   closeModal();
 
@@ -714,13 +711,13 @@ function del(id){
   if(!confirm("この登録を削除する？"))
     return;
 
-  items =
-    items.filter(x=>x.id!==id);
+  items = items.filter(x=>x.id!==id);
 
-  localStorage.setItem(
-    KEY,
-    JSON.stringify(items)
-  );
+  try {
+    localStorage.setItem(KEY, JSON.stringify(items));
+  } catch(e) {
+    console.error("Storage Error:", e);
+  }
 
   render();
 }
@@ -732,8 +729,7 @@ function del(id){
 
 function editItem(id){
 
-  const x =
-    items.find(item=>item.id===id);
+  const x = items.find(item=>item.id===id);
 
   if(!x) return;
 
@@ -741,8 +737,7 @@ function editItem(id){
 
   $("modal").classList.remove("hidden");
 
-  $("ocrStatus").textContent =
-    "登録内容を編集できます。";
+  $("ocrStatus").textContent = "登録内容を編集できます。";
 
   $("progressBar").style.width="100%";
 

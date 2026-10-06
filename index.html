@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#111827">
 <title>MOTTAINAI</title>
 
+<!-- Tesseract.js v5 -->
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <style>
@@ -349,13 +350,13 @@ const $ = id => document.getElementById(id);
 ------------------------- */
 
 function choosePhoto(){
-  closeModal(); // フォーム内容をリセットしてから選択画面を開く
+  closeModal();
   $("photo").click();
 }
 
 
 /* -------------------------
-   画像読み取り
+   画像読み取り (安定化版)
 ------------------------- */
 
 async function readImage(input){
@@ -367,60 +368,53 @@ async function readImage(input){
   $("modalTitle").textContent = "📋 内容を確認";
   $("modal").classList.remove("hidden");
 
-  $("ocrStatus").textContent =
-    "画像を読み取っています…";
-
-  $("progressBar").style.width = "5%";
+  $("ocrStatus").textContent = "解析ライブラリを準備中…";
+  $("progressBar").style.width = "10%";
 
   const preview = $("preview");
-
   preview.src = URL.createObjectURL(file);
-
   preview.classList.remove("hidden");
 
-  try{
+  // Tesseract Worker（Worker設定を追加して通信エラーを防止）
+  let worker = null;
 
-    const result = await Tesseract.recognize(
-      file,
-      "jpn+eng",
-      {
-        logger: message => {
-
-          if(message.status === "recognizing text"){
-
-            const p =
-              Math.round((message.progress || 0) * 100);
-
-            $("progressBar").style.width = p + "%";
-
-            $("ocrStatus").textContent =
-              "文字を読み取り中… " + p + "%";
-          }
-
+  try {
+    // CDNのパス指定を明示
+    worker = await Tesseract.createWorker("jpn+eng", 1, {
+      workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
+      langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+      corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js',
+      logger: message => {
+        if (message.status === "recognizing text") {
+          const p = Math.round((message.progress || 0) * 100);
+          $("progressBar").style.width = p + "%";
+          $("ocrStatus").textContent = "文字を読み取り中… " + p + "%";
+        } else if (message.status) {
+          $("ocrStatus").textContent = "準備中 (" + message.status + ")…";
         }
       }
-    );
+    });
 
+    const result = await worker.recognize(file);
     const text = result.data.text || "";
 
     $("progressBar").style.width = "100%";
-
-    $("ocrStatus").textContent =
-      "読み取り完了。内容を確認してね。";
+    $("ocrStatus").textContent = "読み取り完了。内容を確認してね。";
 
     parseText(text);
 
-  }catch(error){
+  } catch(error) {
+    console.error("OCR Error:", error);
 
-    console.error(error);
-
-    $("ocrStatus").textContent =
-      "読み取りに失敗しました。手入力してください。";
-
+    $("ocrStatus").textContent = "読み取りに失敗しました。直接手入力してください。";
     $("progressBar").style.width = "0%";
 
     parseText("");
 
+  } finally {
+    if (worker) {
+      await worker.terminate(); // リソース解放
+    }
   }
 
 }
@@ -437,7 +431,7 @@ function parseText(text){
     .replace(/[　]/g," ")
     .trim();
 
-  console.log("OCR:",clean);
+  console.log("OCRResult:", clean);
 
   let date = findDate(clean);
   let amount = findAmount(clean);
@@ -615,7 +609,7 @@ function guessAction(type,title){
 
 
 /* -------------------------
-   保存 (新規追加 / 編集更新 両対応)
+   保存
 ------------------------- */
 
 function saveItem(){
@@ -637,7 +631,6 @@ function saveItem(){
 
   if(editId){
 
-    // 編集モード：既存データを更新
     items = items.map(item => {
       if(item.id === editId){
         return {
@@ -654,7 +647,6 @@ function saveItem(){
 
   }else{
 
-    // 新規作成モード
     const item = {
 
       id: Date.now(),
@@ -689,7 +681,7 @@ function saveItem(){
 
 
 /* -------------------------
-   モーダル閉じる & フォーム初期化
+   モーダル閉じる
 ------------------------- */
 
 function closeModal(){
@@ -704,7 +696,6 @@ function closeModal(){
 
   $("progressBar").style.width="0%";
 
-  // フォーム値を完全に初期化
   $("title").value = "";
   $("amount").value = "";
   $("date").value = "";
@@ -858,7 +849,6 @@ function render(){
   }
 
 
-  // 日付の正確な差分計算用に本日（00:00:00）を取得
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 

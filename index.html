@@ -107,6 +107,18 @@ label{
   font-size:13px
 }
 
+.item-actions{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  min-width:70px
+}
+
+.item-actions button{
+  padding:8px 12px;
+  font-size:13px
+}
+
 .date{
   font-weight:800
 }
@@ -254,10 +266,13 @@ label{
   onchange="readImage(this)"
 >
 
+<!-- 編集用ID -->
+<input id="saveEditMode" type="hidden">
+
 <div id="modal" class="modal hidden">
   <div class="modalbox">
 
-    <h2>📋 内容を確認</h2>
+    <h2 id="modalTitle">📋 内容を確認</h2>
 
     <div id="ocrStatus" class="status">
       画像を読み取っています…
@@ -334,6 +349,7 @@ const $ = id => document.getElementById(id);
 ------------------------- */
 
 function choosePhoto(){
+  closeModal(); // フォーム内容をリセットしてから選択画面を開く
   $("photo").click();
 }
 
@@ -348,6 +364,7 @@ async function readImage(input){
 
   const file = input.files[0];
 
+  $("modalTitle").textContent = "📋 内容を確認";
   $("modal").classList.remove("hidden");
 
   $("ocrStatus").textContent =
@@ -598,7 +615,7 @@ function guessAction(type,title){
 
 
 /* -------------------------
-   保存
+   保存 (新規追加 / 編集更新 両対応)
 ------------------------- */
 
 function saveItem(){
@@ -616,25 +633,49 @@ function saveItem(){
     return;
   }
 
-  const item = {
+  const editId = Number($("saveEditMode").value);
 
-    id:Date.now(),
+  if(editId){
 
-    title:title,
+    // 編集モード：既存データを更新
+    items = items.map(item => {
+      if(item.id === editId){
+        return {
+          ...item,
+          title: title,
+          type: $("type").value,
+          amount: Number($("amount").value || 0),
+          date: date,
+          action: $("action").value.trim()
+        };
+      }
+      return item;
+    });
 
-    type:$("type").value,
+  }else{
 
-    amount:Number($("amount").value || 0),
+    // 新規作成モード
+    const item = {
 
-    date:date,
+      id: Date.now(),
 
-    action:$("action").value.trim(),
+      title: title,
 
-    createdAt:new Date().toISOString()
+      type: $("type").value,
 
-  };
+      amount: Number($("amount").value || 0),
 
-  items.push(item);
+      date: date,
+
+      action: $("action").value.trim(),
+
+      createdAt: new Date().toISOString()
+
+    };
+
+    items.push(item);
+
+  }
 
   localStorage.setItem(
     KEY,
@@ -648,7 +689,7 @@ function saveItem(){
 
 
 /* -------------------------
-   モーダル閉じる
+   モーダル閉じる & フォーム初期化
 ------------------------- */
 
 function closeModal(){
@@ -657,9 +698,18 @@ function closeModal(){
 
   $("photo").value="";
 
+  $("saveEditMode").value="";
+
   $("preview").classList.add("hidden");
 
   $("progressBar").style.width="0%";
+
+  // フォーム値を完全に初期化
+  $("title").value = "";
+  $("amount").value = "";
+  $("date").value = "";
+  $("type").value = "ポイント";
+  $("action").value = "";
 
 }
 
@@ -695,6 +745,8 @@ function editItem(id){
     items.find(item=>item.id===id);
 
   if(!x) return;
+
+  $("modalTitle").textContent = "✏️ 登録内容を編集";
 
   $("modal").classList.remove("hidden");
 
@@ -806,16 +858,16 @@ function render(){
   }
 
 
+  // 日付の正確な差分計算用に本日（00:00:00）を取得
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
   $("list").innerHTML =
     arr.map(x=>{
 
-      const d =
-        Math.ceil(
-          (
-            new Date(x.date+"T23:59:59")
-            - new Date()
-          ) / 86400000
-        );
+      const targetDate = new Date(x.date + "T00:00:00");
+      const diffTime = targetDate - today;
+      const d = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
       let c =
         d < 0
@@ -860,7 +912,7 @@ function render(){
 
           </div>
 
-          <div>
+          <div class="item-actions">
 
             <button
               class="gray"
@@ -868,8 +920,6 @@ function render(){
             >
               編集
             </button>
-
-            <br><br>
 
             <button
               class="danger"
@@ -895,9 +945,6 @@ function render(){
 render();
 
 </script>
-
-<!-- 編集用ID -->
-<input id="saveEditMode" type="hidden">
 
 </body>
 </html>
